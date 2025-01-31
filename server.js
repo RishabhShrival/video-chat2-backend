@@ -1,71 +1,49 @@
 const WebSocket = require("ws");
+const server = new WebSocket.Server({ port: 8080 });
 
-const server = new WebSocket.Server({ port: 3001 });
-const waitingUsers = new Set();
-const activeConnections = new Map();
+let liveUsers = new Map(); // Store active users
 
-server.on("connection", (socket) => {
-  console.log("New connection established");
+server.on("connection", (ws) => {
   let username = null;
 
-  socket.on("message", (message) => {
+  ws.on("message", (message) => {
     const data = JSON.parse(message);
-    
+
     switch (data.type) {
       case "go-live":
         username = data.username;
-        if (waitingUsers.size > 0) {
-          const availableUser = waitingUsers.values().next().value;
-          waitingUsers.delete(availableUser);
-          activeConnections.set(username, availableUser);
-          activeConnections.set(availableUser, username);
-          
-          sendToUser(username, { type: "matched", peer: availableUser });
-          sendToUser(availableUser, { type: "matched", peer: username });
-        } else {
-          waitingUsers.add(username);
-          sendToUser(username, { type: "no-available-users" });
-        }
+        liveUsers.set(username, ws);
+        matchUsers();
         break;
-      
+
       case "offer":
       case "answer":
       case "ice-candidate":
-        if (activeConnections.has(username)) {
-          sendToUser(activeConnections.get(username), data);
-        }
-        break;
-
-      case "go-off":
-        cleanupUser(username);
-        break;
-      
-      case "logout":
-        cleanupUser(username);
+        sendToUser(data.target, data);
         break;
     }
   });
 
-  socket.on("close", () => {
-    cleanupUser(username);
-    console.log("Connection closed");
+  ws.on("close", () => {
+    if (username) liveUsers.delete(username);
   });
 });
 
-function sendToUser(username, data) {
-  server.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(data));
-    }
-  });
-}
-
-function cleanupUser(username) {
-  waitingUsers.delete(username);
-  if (activeConnections.has(username)) {
-    const peer = activeConnections.get(username);
-    activeConnections.delete(peer);
-    activeConnections.delete(username);
-    sendToUser(peer, { type: "peer-disconnected" });
+function matchUsers() {
+  const users = [...liveUsers.keys()];
+  if (users.length >= 2) {
+    const [user1, user2] = users.slice(0, 2);
+    sendToUser(user1, { type: "connect-peer", username: user2 });
+    sendToUser(user2, { type: "connect-peer", username: user1 });
+  } else {
+    sendToUser(users[0], { type: "no-user-available" });
   }
 }
+
+function sendToUser(username, data) {
+  if (liveUsers.has(username)) {
+    liveUsers.get(username).send(JSON.stringify(data));
+  }
+}
+
+// console.log("WebSocket server running on ws://localhost:8080");
