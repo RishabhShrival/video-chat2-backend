@@ -1,49 +1,54 @@
-const WebSocket = require("ws");
-const server = new WebSocket.Server({ port: 8080 });
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 
-let liveUsers = new Map(); // Store active users
-
-server.on("connection", (ws) => {
-  let username = null;
-
-  ws.on("message", (message) => {
-    const data = JSON.parse(message);
-
-    switch (data.type) {
-      case "go-live":
-        username = data.username;
-        liveUsers.set(username, ws);
-        matchUsers();
-        break;
-
-      case "offer":
-      case "answer":
-      case "ice-candidate":
-        sendToUser(data.target, data);
-        break;
-    }
-  });
-
-  ws.on("close", () => {
-    if (username) liveUsers.delete(username);
-  });
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: 'https://video-chat2-frontend.onrender.com',
+    methods: ['GET', 'POST']
+  }
 });
 
-function matchUsers() {
-  const users = [...liveUsers.keys()];
-  if (users.length >= 2) {
-    const [user1, user2] = users.slice(0, 2);
-    sendToUser(user1, { type: "connect-peer", username: user2 });
-    sendToUser(user2, { type: "connect-peer", username: user1 });
-  } else {
-    sendToUser(users[0], { type: "no-user-available" });
-  }
-}
+let users = {}; // Store active users
 
-function sendToUser(username, data) {
-  if (liveUsers.has(username)) {
-    liveUsers.get(username).send(JSON.stringify(data));
-  }
-}
+io.on("connection", (socket) => {
+  let username = null;
 
-// console.log("WebSocket server running on ws://localhost:8080");
+  socket.on("register", (userId) => {
+    users[userId] = socket.id;
+        io.emit("user-list", Object.keys(users));
+  })
+
+  socket.on("call-user", ({ to, offer }) => {
+        if (users[to]) {
+            io.to(users[to]).emit("incoming-call", { from: socket.id, offer });
+        }
+    });
+
+    socket.on("answer-call", ({ to, answer }) => {
+        if (users[to]) {
+            io.to(users[to]).emit("call-answered", { from: socket.id, answer });
+        }
+    });
+
+    socket.on("ice-candidate", ({ to, candidate }) => {
+        if (users[to]) {
+            io.to(users[to]).emit("ice-candidate", { from: socket.id, candidate });
+        }
+    });
+  
+    socket.on("disconnect", () => {
+        Object.keys(users).forEach((key) => {
+            if (users[key] === socket.id) delete users[key];
+        });
+        io.emit("user-list", Object.keys(users));
+      
+      });
+
+    });
+
+
+
+server.listen(8080, () => console.log("Server running on port 8080"));
