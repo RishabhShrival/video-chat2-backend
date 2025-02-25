@@ -1,53 +1,41 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const cors = require("cors");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    methods: ['GET', 'POST']
-  }
+    origin: "*", // Allow all origins (change in production)
+    methods: ["GET", "POST"],
+  },
 });
 
-let users = {}; // Store active users
+const users = {}; // Store connected users
 
 io.on("connection", (socket) => {
-  let username = null;
+  console.log("New user connected:", socket.id);
+  users[socket.id] = socket.id;
 
-  socket.on("register", (userId) => {
-    users[userId] = socket.id;
-        io.emit("user-list", Object.keys(users));
-  })
+  // Notify all clients of updated user list
+  io.emit("user-list", Object.keys(users));
 
-  socket.on("call-user", ({ to, offer }) => {
-        if (users[to]) {
-            io.to(users[to]).emit("incoming-call", { from: socket.id, offer });
-        }
-    });
+  // Handle disconnect
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+    delete users[socket.id];
+    io.emit("user-list", Object.keys(users));
+  });
 
-    socket.on("answer-call", ({ to, answer }) => {
-        if (users[to]) {
-            io.to(users[to]).emit("call-answered", { from: socket.id, answer });
-        }
-    });
+  // Relay signaling data
+  socket.on("signal", ({ to, signal }) => {
+    console.log(`Relaying signal from ${socket.id} to ${to}`);
+    io.to(to).emit("signal", { from: socket.id, signal });
+  });
+});
 
-    socket.on("ice-candidate", ({ to, candidate }) => {
-        if (users[to]) {
-            io.to(users[to]).emit("ice-candidate", { from: socket.id, candidate });
-        }
-    });
-  
-    socket.on("disconnect", () => {
-        Object.keys(users).forEach((key) => {
-            if (users[key] === socket.id) delete users[key];
-        });
-        io.emit("user-list", Object.keys(users));
-      
-      });
-
-    });
-
-
-
-server.listen(8080, () => console.log("Server running on port 8080"));
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
