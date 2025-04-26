@@ -27,10 +27,10 @@ io.on("connection", (socket) => {
   socket.on("create-room", () => {
     const roomId = generateRoomId();
     if (!rooms[roomId]) {
-      rooms[roomId] = [];
+      rooms[roomId] = new Set();
       console.log(`Room created: ${roomId}`);
     }
-    rooms[roomId].push(socket.id);
+    rooms[roomId].add(socket.id);
     socket.join(roomId);
     io.to(roomId).emit("user-list", rooms[roomId]); // Send user list of the room
     socket.emit("room-id", roomId); // Send the newly created room ID to the user
