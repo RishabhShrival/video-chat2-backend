@@ -36,17 +36,19 @@ io.on("connection", (socket) => {
     socket.emit("room-id", roomId); // Send the newly created room ID to the user
   });
 
-  // Handle joining a room
   socket.on("join-room", (roomId) => {
-    if (rooms[roomId]) {
-      rooms[roomId].push(socket.id);
-      socket.join(roomId);
-      io.to(roomId).emit("user-list", rooms[roomId]); // Send user list of the room
-      console.log(`User joined room: ${roomId}`);
-    } else {
-      socket.emit("error", "Room does not exist!");
-    }
-  });
+  const room = rooms[roomId];
+  if (room) {
+    room.add(socket.id);
+    socket.join(roomId);
+    console.log(`User ${socket.id} joined room ${roomId}`);
+    const userList = Array.from(room);
+    io.to(socket.id).emit("all-users", userList.filter(id => id !== socket.id)); // 👈 only send to joining user
+    io.to(roomId).emit("user-list", userList);
+  } else {
+    socket.emit("error", "Room ID not found.");
+  }
+});
 
   // Handle disconnect
   socket.on("disconnect", () => {
