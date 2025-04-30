@@ -52,18 +52,28 @@ io.on("connection", (socket) => {
 
   // Handle disconnect
   socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-    for (let roomId in rooms) {
-      rooms[roomId] = rooms[roomId].filter((id) => id !== socket.id);
-      io.to(roomId).emit("user-list", rooms[roomId]);
+  console.log("User disconnected:", socket.id);
 
-      // If no users are left in the room, delete the room
-      if (rooms[roomId].length === 0) {
+  // Remove user from room
+  for (const [roomId, room] of Object.entries(rooms)) {
+    if (room.has(socket.id)) {
+      room.delete(socket.id);
+
+      // If room is empty, delete it
+      if (room.size === 0) {
         delete rooms[roomId];
-        console.log(`Room ${roomId} has been deleted due to inactivity.`);
+      } else {
+        // Notify others in the room that this user left
+        socket.to(roomId).emit("user-left", socket.id);
       }
+
+      break;
     }
-  });
+  }
+
+  delete users[socket.id];
+});
+
 
   // Relay signaling data
   socket.on("signal", ({ to, signal }) => {
