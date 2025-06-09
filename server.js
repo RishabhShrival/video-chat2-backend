@@ -2,88 +2,107 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const crypto = require("crypto"); // For generating unique room IDs
+const crypto = require("crypto");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // Allow all origins (change in production)
+    origin: "*", // Update for production
     methods: ["GET", "POST"],
   },
 });
 
-const rooms = {}; // Store meeting rooms and their participants
+// In-memory storage
+const rooms = {}; // { roomId: { users: [], userListWithNames: [{ id, username }] } }
+const users = {}; // { socketId: username }
+const MAX_USERS_IN_ROOM = 4;
 
-// Utility function to generate a unique room ID
-const generateRoomId = () => {
-  return crypto.randomBytes(6).toString("hex"); // Generates a 12-character hexadecimal string
-};
+// Utility functions
+const generateRoomId = () => crypto.randomBytes(3).toString("hex"); // 6-character room ID
+const getUsername = (id) => users[id] || "Unknown";
 
-const MAX_USERS_IN_ROOM = 4; // Maximum users per room
-
+// Handle socket connection
 io.on("connection", (socket) => {
   console.log("New user connected:", socket.id);
 
-  // Handle creating a room
-  socket.on("create-room", () => {
-    const roomId = generateRoomId();
-    if (!rooms[roomId]) {
-      rooms[roomId] = new Set();
-      console.log(`Room created: ${roomId}`);
-    } else {
-      console.log(`Room already exists: ${roomId}, generating a new one.`);
-      return socket.emit("error", "Room ID already exists, please try again.");
-    }
-
-    rooms[roomId].add(socket.id);
-    socket.join(roomId);
-    io.to(roomId).emit("user-list", rooms[roomId]); // Send user list of the room
-    socket.emit("room-id", roomId); // Send the newly created room ID to the user
+  // Register username
+  socket.on("register-username", (username) => {
+    users[socket.id] = username;
+    console.log(`Registered user: ${username} (${socket.id})`);
   });
 
-  // Handle joining a room
-  socket.on("join-room", (roomId) => {
-    const room = rooms[roomId];
+  // Create a room
+  socket.on("create-room", async () => {
+    try {
+      const roomId = generateRoomId();
+      rooms[roomId] = {
+        users: [socket.id],
+        userListWithNames: [{ id: socket.id, username: getUsername(socket.id) }],
+      };
 
-    if (room) {
-      // Check if the room has less than 4 users
-      if (room.size < MAX_USERS_IN_ROOM) {
-        room.add(socket.id);
-        socket.join(roomId);
-        console.log(`User ${socket.id} joined room ${roomId}`);
+      socket.join(roomId);
+      console.log(`Room created: ${roomId} by ${getUsername(socket.id)}`);
 
-        const userList = Array.from(room);
-        io.to(socket.id).emit("all-users", userList.filter((id) => id !== socket.id)); // Send to joining user
-        io.to(roomId).emit("user-list", userList); // Notify all users in the room
-      } else {
-        socket.emit("error", "Room is full. Please try another room.");
+      socket.emit("room-id", roomId);
+      io.to(roomId).emit("user-list", rooms[roomId].userListWithNames);
+    } catch (err) {
+      console.error("Error creating room:", err);
+      socket.emit("error", "Failed to create room.");
+    }
+  });
+
+  // Join a room
+  socket.on("join-room", async (roomId) => {
+    try {
+      const room = rooms[roomId];
+
+      if (!room) {
+        return socket.emit("error", "Room ID not found.");
       }
-    } else {
-      socket.emit("error", "Room ID not found.");
+
+      if (room.users.length >= MAX_USERS_IN_ROOM) {
+        return socket.emit("error", "Room is full.");
+      }
+
+      room.users.push(socket.id);
+      room.userListWithNames.push({ id: socket.id, username: getUsername(socket.id) });
+      socket.join(roomId);
+
+      console.log(`User ${getUsername(socket.id)} joined room ${roomId}`);
+
+      io.to(roomId).emit("user-list", room.userListWithNames);
+    } catch (err) {
+      console.error("Join room error:", err);
+      socket.emit("error", "Failed to join room.");
     }
   });
 
   // Handle disconnect
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
+  socket.on("disconnect", async () => {
+    console.log(`User disconnected: ${getUsername(socket.id)}`);
 
-    // Remove user from room
-    for (const [roomId, room] of Object.entries(rooms)) {
-      if (room.has(socket.id)) {
-        room.delete(socket.id);
+    try {
+      for (const [roomId, room] of Object.entries(rooms)) {
+        if (room.users.includes(socket.id)) {
+          room.users = room.users.filter((id) => id !== socket.id);
+          room.userListWithNames = room.userListWithNames.filter((user) => user.id !== socket.id);
 
-        // If room is empty, delete it
-        if (room.size === 0) {
-          delete rooms[roomId];
-        } else {
-          // Notify others in the room that this user left
-          socket.to(roomId).emit("user-left", socket.id);
+          if (room.users.length === 0) {
+            delete rooms[roomId];
+            console.log(`Room ${roomId} deleted (empty).`);
+          } else {
+            io.to(roomId).emit("user-left", socket.id);
+            io.to(roomId).emit("user-list", room.userListWithNames);
+          }
+          break;
         }
-
-        break;
       }
+    } catch (err) {
+      console.error("Disconnect error:", err);
     }
+
+    delete users[socket.id];
   });
 
   // Relay signaling data
@@ -93,6 +112,7 @@ io.on("connection", (socket) => {
   });
 });
 
+// Start server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
