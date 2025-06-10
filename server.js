@@ -25,7 +25,6 @@ const getUsername = (id) => users[id] || "Unknown";
 // Handle socket connection
 io.on("connection", (socket) => {
   console.log("New user connected:", socket.id);
-  socket.emit("connect");
   // Register username
   socket.on("register-username", (username) => {
     users[socket.id] = username;
