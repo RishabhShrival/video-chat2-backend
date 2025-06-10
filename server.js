@@ -14,7 +14,7 @@ const io = new Server(server, {
 });
 
 // In-memory storage
-const rooms = {}; // { roomId: { users: [], userListWithNames: [{ id, username }] } }
+const rooms = {}; // { roomId: { users: [] } }
 const users = {}; // { socketId: username }
 const MAX_USERS_IN_ROOM = 4;
 
@@ -25,7 +25,7 @@ const getUsername = (id) => users[id] || "Unknown";
 // Handle socket connection
 io.on("connection", (socket) => {
   console.log("New user connected:", socket.id);
-
+  socket.emit("connect");
   // Register username
   socket.on("register-username", (username) => {
     users[socket.id] = username;
@@ -37,15 +37,14 @@ io.on("connection", (socket) => {
     try {
       const roomId = generateRoomId();
       rooms[roomId] = {
-        users: [socket.id],
-        userListWithNames: [{ id: socket.id, username: getUsername(socket.id) }],
+        users: [socket.id]
       };
 
       socket.join(roomId);
       console.log(`Room created: ${roomId} by ${getUsername(socket.id)}`);
 
       socket.emit("room-id", roomId);
-      io.to(roomId).emit("user-list", rooms[roomId].userListWithNames);
+      io.to(roomId).emit("user-list", rooms[roomId].users.map(id => ({ id, username: getUsername(id) })));
     } catch (err) {
       console.error("Error creating room:", err);
       socket.emit("error", "Failed to create room.");
@@ -54,6 +53,7 @@ io.on("connection", (socket) => {
 
   // Join a room
   socket.on("join-room", async (roomId) => {
+    console.log(`Current room strength: ${room.users.length}`);
     try {
       const room = rooms[roomId];
 
@@ -64,14 +64,17 @@ io.on("connection", (socket) => {
       if (room.users.length >= MAX_USERS_IN_ROOM) {
         return socket.emit("error", "Room is full.");
       }
-
+      if (room.users.includes(socket.id)) {
+        return socket.emit("error", "You are already in this room.");
+      }
+      
       room.users.push(socket.id);
-      room.userListWithNames.push({ id: socket.id, username: getUsername(socket.id) });
       socket.join(roomId);
 
       console.log(`User ${getUsername(socket.id)} joined room ${roomId}`);
+      
 
-      io.to(roomId).emit("user-list", room.userListWithNames);
+      io.to(roomId).emit("user-list", room.users.map(id => ({ id, username: getUsername(id) })));
     } catch (err) {
       console.error("Join room error:", err);
       socket.emit("error", "Failed to join room.");
@@ -86,14 +89,13 @@ io.on("connection", (socket) => {
       for (const [roomId, room] of Object.entries(rooms)) {
         if (room.users.includes(socket.id)) {
           room.users = room.users.filter((id) => id !== socket.id);
-          room.userListWithNames = room.userListWithNames.filter((user) => user.id !== socket.id);
-
+          console.log(`Current room strength: ${room.users.length}`);
           if (room.users.length === 0) {
             delete rooms[roomId];
             console.log(`Room ${roomId} deleted (empty).`);
           } else {
+            console.log(`User ${getUsername(socket.id)} left room ${roomId}`);
             io.to(roomId).emit("user-left", socket.id);
-            io.to(roomId).emit("user-list", room.userListWithNames);
           }
           break;
         }
@@ -103,6 +105,7 @@ io.on("connection", (socket) => {
     }
 
     delete users[socket.id];
+    
   });
 
   // Relay signaling data
