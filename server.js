@@ -52,13 +52,13 @@ io.on("connection", (socket) => {
 
   // Join a room
   socket.on("join-room", async (roomId) => {
-    console.log(`Current room strength: ${rooms[roomId].users.length}`);
     try {
       const room = rooms[roomId];
 
       if (!room) {
         return socket.emit("error", "Room ID not found.");
       }
+      console.log(`Current room strength: ${room.users.length}`);
 
       if (room.users.length >= MAX_USERS_IN_ROOM) {
         return socket.emit("error", "Room is full.");
