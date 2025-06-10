@@ -58,7 +58,6 @@ io.on("connection", (socket) => {
       if (!room) {
         return socket.emit("error", "Room ID not found.");
       }
-      console.log(`Current room strength: ${room.users.length}`);
 
       if (room.users.length >= MAX_USERS_IN_ROOM) {
         return socket.emit("error", "Room is full.");
@@ -71,7 +70,7 @@ io.on("connection", (socket) => {
       socket.join(roomId);
 
       console.log(`User ${getUsername(socket.id)} joined room ${roomId}`);
-      
+      console.log(`Current room strength: ${room.users.length}`);
 
       io.to(roomId).emit("user-list", room.users.map(id => ({ id, username: getUsername(id) })));
     } catch (err) {
