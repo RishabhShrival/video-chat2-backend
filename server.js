@@ -25,6 +25,8 @@ const getUsername = (id) => users[id] || "Unknown";
 // Handle socket connection
 io.on("connection", (socket) => {
   console.log("New user connected:", socket.id);
+
+
   // Register username
   socket.on("register-username", (username) => {
     users[socket.id] = username;
@@ -104,6 +106,23 @@ io.on("connection", (socket) => {
 
     delete users[socket.id];
     
+  });
+
+  socket.on("LeaveRoom", (roomId) => {
+    if (!rooms[roomId]) {
+      return socket.emit("error", "Room ID not found.");
+    }
+
+    rooms[roomId].users = rooms[roomId].users.filter((id) => id !== socket.id);
+    socket.leave(roomId);
+    console.log(`User ${getUsername(socket.id)} left room ${roomId}`);
+
+    if (rooms[roomId].users.length === 0) {
+      delete rooms[roomId];
+      console.log(`Room ${roomId} deleted (empty).`);
+    } else {
+      io.to(roomId).emit("user-list", rooms[roomId].users.map(id => ({ id, username: getUsername(id) })));
+    }
   });
 
   // Relay signaling data
