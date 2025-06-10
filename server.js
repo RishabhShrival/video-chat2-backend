@@ -67,14 +67,14 @@ io.on("connection", (socket) => {
       if (room.users.includes(socket.id)) {
         return socket.emit("error", "You are already in this room.");
       }
-      
-      room.users.push(socket.id);
       socket.join(roomId);
+      room.users.push(socket.id);
+      io.to(roomId).emit("user-list", room.users.map(id => ({ id, username: getUsername(id) })));
 
       console.log(`User ${getUsername(socket.id)} joined room ${roomId}`);
       console.log(`Current room strength: ${room.users.length}`);
 
-      io.to(roomId).emit("user-list", room.users.map(id => ({ id, username: getUsername(id) })));
+      
     } catch (err) {
       console.error("Join room error:", err);
       socket.emit("error", "Failed to join room.");
