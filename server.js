@@ -52,7 +52,7 @@ io.on("connection", (socket) => {
 
   // Join a room
   socket.on("join-room", async (roomId) => {
-    console.log(`Current room strength: ${room.users.length}`);
+    console.log(`Current room strength: ${rooms[roomId].users.length}`);
     try {
       const room = rooms[roomId];
 
