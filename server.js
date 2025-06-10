@@ -22,11 +22,30 @@ const MAX_USERS_IN_ROOM = 4;
 const generateRoomId = () => crypto.randomBytes(3).toString("hex"); // 6-character room ID
 const getUsername = (id) => users[id] || "Unknown";
 
+const leaveRoom = (socket, roomId) => {
+  const room = rooms[roomId];
+  try {
+    room.users = room.users.filter((id) => id !== socket.id);
+    socket.leave(roomId);
+    console.log(`User ${getUsername(socket.id)} left room ${roomId}`);
+
+    if (room.users.length === 0) {
+      delete rooms[roomId];
+      console.log(`Room ${roomId} deleted (empty).`);
+    } else {
+      io.to(roomId).emit("user-list", room.users.map(id => ({ id, username: getUsername(id) })));
+    }
+  } catch (error) {
+    console.error("Error leaving room:", error);
+    return socket.emit("error", "Failed to leave room.");
+  }
+  
+};
+
 // Handle socket connection
 io.on("connection", (socket) => {
   console.log("New user connected:", socket.id);
-
-
+  
   // Register username
   socket.on("register-username", (username) => {
     users[socket.id] = username;
@@ -67,6 +86,7 @@ io.on("connection", (socket) => {
       if (room.users.includes(socket.id)) {
         return socket.emit("error", "You are already in this room.");
       }
+
       socket.join(roomId);
       room.users.push(socket.id);
       io.to(roomId).emit("user-list", room.users.map(id => ({ id, username: getUsername(id) })));
@@ -84,48 +104,17 @@ io.on("connection", (socket) => {
   // Handle disconnect
   socket.on("disconnect", async () => {
     console.log(`User disconnected: ${getUsername(socket.id)}`);
-
-    try {
-      for (const [roomId, room] of Object.entries(rooms)) {
-        if (room.users.includes(socket.id)) {
-          room.users = room.users.filter((id) => id !== socket.id);
-          console.log(`Current room strength: ${room.users.length}`);
-          if (room.users.length === 0) {
-            delete rooms[roomId];
-            console.log(`Room ${roomId} deleted (empty).`);
-          } else {
-            console.log(`User ${getUsername(socket.id)} left room ${roomId}`);
-            io.to(roomId).emit("user-left", socket.id);
-          }
-          break;
-        }
-      }
-    } catch (err) {
-      console.error("Disconnect error:", err);
-    }
-
+    leaveRoom(socket, Object.keys(rooms).find(roomId => rooms[roomId].users.includes(socket.id)));
     delete users[socket.id];
     
   });
 
   socket.on("LeaveRoom", (roomId) => {
-    if (!rooms[roomId]) {
-      return socket.emit("error", "Room ID not found.");
-    }
-
-    rooms[roomId].users = rooms[roomId].users.filter((id) => id !== socket.id);
-    socket.leave(roomId);
-    console.log(`User ${getUsername(socket.id)} left room ${roomId}`);
-
-    if (rooms[roomId].users.length === 0) {
-      delete rooms[roomId];
-      console.log(`Room ${roomId} deleted (empty).`);
-    } else {
-      io.to(roomId).emit("user-list", rooms[roomId].users.map(id => ({ id, username: getUsername(id) })));
-    }
+    leaveRoom(socket, roomId);
+    console.log(`User ${getUsername(socket.id)} leaved room ${roomId}`);
   });
 
-  // Relay signaling data
+  // Relay signaling data for connection establishment
   socket.on("signal", ({ to, signal }) => {
     console.log(`Relaying signal from ${socket.id} to ${to}`);
     io.to(to).emit("signal", { from: socket.id, signal });
