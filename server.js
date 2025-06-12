@@ -127,6 +127,19 @@ io.on("connection", (socket) => {
     console.log(`User ${getUsername(socket.id)} leaved room ${roomId}`);
   });
 
+  socket.on("camera-mic-status", ({roomId, camera, mic}) => {
+    if (!rooms[roomId]) {
+      return;
+    }
+    
+    // Broadcast camera and mic status to all users in the room
+    io.to(roomId).emit("camera-mic-status", {
+      id: socket.id,
+      camera: camera,
+      mic: mic
+    });
+  });
+
   //optional: user-list
   socket.on("user-list", (roomId) => {
     const userList = rooms[roomId]?.users?.map(id => ({ id: id, username: getUsername(id) }));
@@ -155,6 +168,7 @@ server.listen(PORT, () => {
 // 6. "leave-room" (roomId) - Leave a room
 // 7. "signal" ({ to, signal }) - Relay signaling data for peer connection
 // 8. "user-list" (roomId) - Get the list of users in a room
+// 9. "camera-mic-status" ({roomId, camera, mic}) - Update camera and mic status for users in a room
 
 
 //types of emits events
@@ -165,3 +179,4 @@ server.listen(PORT, () => {
 // 5. "user-left" (socketId) - Notify users in the room when a user leaves
 // 6. "error" (message) - Send error messages to the user
 // 7. "user-list" (userList) - Send the list of users in a room to the requesting user
+// 8. "camera-mic-status" ({ id, camera, mic }) - Broadcast camera and mic status to all users in the room
