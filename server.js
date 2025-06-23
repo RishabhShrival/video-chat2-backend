@@ -20,7 +20,7 @@ const MAX_USERS_IN_ROOM = 4;
 
 // Utility functions
 const generateRoomId = () => crypto.randomBytes(3).toString("hex"); // 6-character room ID
-const getUsername = (id) => users[id].username || "Unknown";
+const getUsername = (id) => users[id]?.username || "Unknown";
 
 const leaveRoom = (socket, roomId) => {
   if (!roomId || !rooms[roomId]) return;
@@ -59,58 +59,69 @@ io.on("connection", (socket) => {
   // Create a room
   socket.on("create-room", async () => {
     try {
-      const roomId = generateRoomId();
-      rooms[roomId] = {
-        users: [socket.id]
-      };
-      users[socket.id].roomId = roomId;
-      // Join the user to the room
-      socket.join(roomId);
-      console.log(`Room created: ${roomId} by ${getUsername(socket.id)}`);
+        // Ensure the user is registered
+        if (!users[socket.id]) {
+            return socket.emit("error", "You must register a username before creating a room.");
+        }
 
-      socket.emit("room-id", roomId);
+        const roomId = generateRoomId();
+        rooms[roomId] = {
+            users: [socket.id]
+        };
 
+        // Safely set the roomId for the user
+        if (users[socket.id]) {
+            users[socket.id].roomId = roomId;
+        }
+
+        // Join the user to the room
+        socket.join(roomId);
+        console.log(`Room created: ${roomId} by ${getUsername(socket.id)}`);
+
+        socket.emit("room-id", roomId);
     } catch (err) {
-      console.error("Error creating room:", err);
-      socket.emit("error", "Failed to create room.");
+        console.error("Error creating room:", err);
+        socket.emit("error", "Failed to create room.");
     }
   });
 
   // Join a room
   socket.on("join-room", async (roomId) => {
     try {
-      const room = rooms[roomId];
+        const room = rooms[roomId];
 
-      if (!room) {
-        return socket.emit("error", "Room ID not found.");
-      }
+        if (!room) {
+            return socket.emit("error", "Room ID not found.");
+        }
 
-      if (room.users.length >= MAX_USERS_IN_ROOM) {
-        return socket.emit("error", "Room is full.");
-      }
-      
-      if (room.users.includes(socket.id)) {
-        return socket.emit("error", "You are already in this room.");
-      }
+        if (room.users.length >= MAX_USERS_IN_ROOM) {
+            return socket.emit("error", "Room is full.");
+        }
+        
+        if (room.users.includes(socket.id)) {
+            return socket.emit("error", "You are already in this room.");
+        }
 
-      if (users[socket.id].roomId) {
-        return socket.emit("error", "You are already in a room. Leave it first.");
-      }
+        if (users[socket.id]?.roomId) {
+            return socket.emit("error", "You are already in a room. Leave it first.");
+        }
 
-      room.users.push(socket.id);
-      users[socket.id].roomId = roomId;
-      
-      socket.join(roomId);
-      io.to(roomId).emit("user-joined", { id: socket.id, username: getUsername(socket.id) });
-      io.to(socket.id).emit("room-joined", { roomId, users: room.users.map(id => ({ id, username: getUsername(id) })) });
+        room.users.push(socket.id);
 
-      console.log(`User ${getUsername(socket.id)} joined room ${roomId}`);
-      console.log(`Current room strength: ${room.users.length}`);
+        // Safely set the roomId for the user
+        if (users[socket.id]) {
+            users[socket.id].roomId = roomId;
+        }
 
-      
+        socket.join(roomId);
+        io.to(roomId).emit("user-joined", { id: socket.id, username: getUsername(socket.id) });
+        io.to(socket.id).emit("room-joined", { roomId, users: room.users.map(id => ({ id, username: getUsername(id) })) });
+
+        console.log(`User ${getUsername(socket.id)} joined room ${roomId}`);
+        console.log(`Current room strength: ${room.users.length}`);
     } catch (err) {
-      console.error("Join room error:", err);
-      socket.emit("error", "Failed to join room.");
+        console.error("Join room error:", err);
+        socket.emit("error", "Failed to join room.");
     }
   });
 
@@ -142,7 +153,7 @@ io.on("connection", (socket) => {
 
   //optional: user-list
   socket.on("user-list", (roomId) => {
-    const userList = rooms[roomId]?.users?.map(id => ({ id: id, username: getUsername(id) }));
+    const userList = rooms[roomId]?.users?.map(id => ({ id, username: getUsername(id) })) || [];
     io.to(socket.id).emit("user-list", userList);
   });
 
