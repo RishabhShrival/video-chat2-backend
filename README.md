@@ -2,7 +2,7 @@
 
 This is the **backend** for a secure, privacy-friendly, peer-to-peer video calling app. It uses **Node.js** with **Express** and **Socket.IO** to enable signaling between peers for WebRTC-based video/audio communication.
 
-🔗 **Frontend Repo**: [video-chat-frontend](https://github.com/RishabhShrival/video-chat2-frontend) *(update with actual URL)*
+🔗 **Frontend Repo**: [video-chat-frontend](https://github.com/RishabhShrival/video-chat2-frontend)
 
 ---
 
@@ -28,7 +28,8 @@ This backend serves as the **signaling server** required to establish WebRTC pee
 
 ## 🚀 Deployment
 
-Hosted on [Render.io](https://video-chat2-4v77.onrender.com), works seamlessly with the frontend.
+Frontend Hosted on [Render.io](https://video-chat2-frontend.onrender.com), works seamlessly with the frontend.
+Backend Hosted on [Render.io](https://video-chat2-4v77.onrender.com)
 
 ---
 
@@ -37,8 +38,8 @@ Hosted on [Render.io](https://video-chat2-4v77.onrender.com), works seamlessly w
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/your-username/video-chat-backend
-cd video-chat-backend
+git clone https://github.com/RishabhShrival/video-chat2-backend
+cd video-chat2-backend
 ```
 
 ### 2. Install dependencies
